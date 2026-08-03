@@ -69,8 +69,14 @@ def run(input_dir: Path, output_dir: Path):
     )
 
     written = []
+    failed = []
     for p in tqdm(paths, desc="Preparing cells", unit="photo"):
-        cell, discarded_fraction, rotated = make_cell(p)
+        try:
+            cell, discarded_fraction, rotated = make_cell(p)
+        except OSError as e:
+            failed.append(p)
+            tqdm.write(f"  ⚠ skipping {p.name}: {e}")
+            continue
         out_path = output_dir / f"{p.stem}_cell.jpg"
         cell.save(out_path, quality=95, dpi=(DPI, DPI))
         written.append(out_path)
@@ -80,6 +86,10 @@ def run(input_dir: Path, output_dir: Path):
         tqdm.write(f"  {p.name} -> {out_path.name} ({CELL_W_PX}x{CELL_H_PX}px @ {DPI}dpi{rot_note}){warn}")
 
     print(f"Prepared {len(written)} cell(s) in {output_dir}")
+    if failed:
+        print(f"Skipped {len(failed)} unreadable file(s):")
+        for p in failed:
+            print(f"  {p.name}")
     return written
 
 
