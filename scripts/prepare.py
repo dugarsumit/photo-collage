@@ -1,7 +1,7 @@
 """Crop/resize kept photos to the 6.5x9cm cell size and bake in a 3mm border."""
 
+import argparse
 import shutil
-import sys
 from pathlib import Path
 
 import smartcrop
@@ -23,6 +23,9 @@ from common import (
 
 HEAVY_CROP_WARN_THRESHOLD = 0.40  # warn if we're discarding more than this fraction of area
 
+CROP_MODES = ("smart", "center", "top", "bottom")
+DEFAULT_CROP_MODE = "smart"
+
 _SMART_CROPPER = smartcrop.SmartCrop()
 
 
@@ -38,18 +41,31 @@ def _crop_size_for_aspect(size: tuple[int, int], target_aspect: float):
     return new_w, new_h, discarded_fraction
 
 
-def smart_crop_to_aspect(img: Image.Image, target_aspect: float):
+def crop_to_aspect(img: Image.Image, target_aspect: float, mode: str = DEFAULT_CROP_MODE):
     """Crop to target_aspect (width/height) without rotating, keeping the photo upright.
-    Uses saliency detection (edges/entropy/skin tone) to position the crop window so it
-    keeps the most interesting content instead of always cutting evenly off both sides.
+    `mode` picks where the crop window is placed:
+      - "smart": saliency detection (edges/entropy/skin tone) picks the most interesting spot
+      - "center": crop evenly off both sides/ends
+      - "top"/"bottom": crop evenly off both sides, anchored to the top or bottom edge
     Returns (cropped_img, fraction_of_area_discarded)."""
+    w, h = img.size
     new_w, new_h, discarded_fraction = _crop_size_for_aspect(img.size, target_aspect)
-    box = _SMART_CROPPER.crop(img, new_w, new_h)["top_crop"]
-    cropped = img.crop((box["x"], box["y"], box["x"] + box["width"], box["y"] + box["height"]))
+    if mode == "smart":
+        box = _SMART_CROPPER.crop(img, new_w, new_h)["top_crop"]
+        x, y = box["x"], box["y"]
+    elif mode == "center":
+        x, y = (w - new_w) // 2, (h - new_h) // 2
+    elif mode == "top":
+        x, y = (w - new_w) // 2, 0
+    elif mode == "bottom":
+        x, y = (w - new_w) // 2, h - new_h
+    else:
+        raise ValueError(f"unknown crop mode: {mode!r} (choose from {CROP_MODES})")
+    cropped = img.crop((x, y, x + new_w, y + new_h))
     return cropped, discarded_fraction
 
 
-def best_orientation_crop(img: Image.Image, target_aspect: float):
+def best_orientation_crop(img: Image.Image, target_aspect: float, mode: str = DEFAULT_CROP_MODE):
     """Try the photo as-is and rotated 90°, keep whichever needs less crop.
     Returns (cropped_img, discarded_fraction, rotated)."""
     candidates = []
@@ -58,14 +74,14 @@ def best_orientation_crop(img: Image.Image, target_aspect: float):
         _, _, discarded_fraction = _crop_size_for_aspect(candidate.size, target_aspect)
         candidates.append((discarded_fraction, rotated, candidate))
     _, rotated, candidate = min(candidates, key=lambda c: c[0])
-    cropped, discarded_fraction = smart_crop_to_aspect(candidate, target_aspect)
+    cropped, discarded_fraction = crop_to_aspect(candidate, target_aspect, mode)
     return cropped, discarded_fraction, rotated
 
 
-def make_cell(src_path: Path, allow_truncated: bool = False):
+def make_cell(src_path: Path, allow_truncated: bool = False, crop_mode: str = DEFAULT_CROP_MODE):
     ImageFile.LOAD_TRUNCATED_IMAGES = allow_truncated  # type: ignore[assignment]
     img = ImageOps.exif_transpose(Image.open(src_path)).convert("RGB")
-    img, discarded_fraction, rotated = best_orientation_crop(img, CONTENT_ASPECT)
+    img, discarded_fraction, rotated = best_orientation_crop(img, CONTENT_ASPECT, crop_mode)
     img = img.resize((CONTENT_W_PX, CONTENT_H_PX), Image.Resampling.LANCZOS)
     cell = ImageOps.expand(img, border=BORDER_PX, fill=BORDER_COLOR)
     assert cell.size == (CELL_W_PX, CELL_H_PX), cell.size
@@ -79,7 +95,7 @@ def copy_to_errors(p: Path, errors_dir: Path):
     return dest
 
 
-def run(input_dir: Path, output_dir: Path):
+def run(input_dir: Path, output_dir: Path, crop_mode: str = DEFAULT_CROP_MODE):
     output_dir.mkdir(parents=True, exist_ok=True)
     errors_dir = output_dir.parent / "errors"
 
@@ -92,12 +108,12 @@ def run(input_dir: Path, output_dir: Path):
     failed = []
     for p in tqdm(paths, desc="Preparing cells", unit="photo"):
         try:
-            cell, discarded_fraction, rotated = make_cell(p)
+            cell, discarded_fraction, rotated = make_cell(p, crop_mode=crop_mode)
         except OSError as e:
             tqdm.write(f"  ⚠ error reading {p.name}: {e} — retrying with truncated-image recovery")
             copy_to_errors(p, errors_dir)
             try:
-                cell, discarded_fraction, rotated = make_cell(p, allow_truncated=True)
+                cell, discarded_fraction, rotated = make_cell(p, allow_truncated=True, crop_mode=crop_mode)
             except OSError as e2:
                 failed.append(p)
                 tqdm.write(f"  ✗ skipping {p.name}: unrecoverable: {e2}")
@@ -125,6 +141,15 @@ def run(input_dir: Path, output_dir: Path):
 
 
 if __name__ == "__main__":
-    input_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("pics")
-    output_dir = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("output/cells")
-    run(input_dir, output_dir)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("input_dir", type=Path, nargs="?", default=Path("pics"))
+    parser.add_argument("output_dir", type=Path, nargs="?", default=Path("output/cells"))
+    parser.add_argument(
+        "--crop",
+        dest="crop_mode",
+        choices=CROP_MODES,
+        default=DEFAULT_CROP_MODE,
+        help=f"crop strategy to use for every photo in this run (default: {DEFAULT_CROP_MODE})",
+    )
+    args = parser.parse_args()
+    run(args.input_dir, args.output_dir, crop_mode=args.crop_mode)
