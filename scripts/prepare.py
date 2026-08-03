@@ -4,6 +4,7 @@ import shutil
 import sys
 from pathlib import Path
 
+import smartcrop
 from PIL import Image, ImageFile, ImageOps
 from tqdm import tqdm
 
@@ -22,23 +23,29 @@ from common import (
 
 HEAVY_CROP_WARN_THRESHOLD = 0.40  # warn if we're discarding more than this fraction of area
 
+_SMART_CROPPER = smartcrop.SmartCrop()
 
-def center_crop_to_aspect(img: Image.Image, target_aspect: float):
-    """Crop to target_aspect (width/height) without rotating, keeping the photo upright.
-    Returns (cropped_img, fraction_of_area_discarded)."""
-    w, h = img.size
-    current_aspect = w / h
-    if current_aspect > target_aspect:
-        # too wide: crop width, keep full height
-        new_w = round(h * target_aspect)
-        left = (w - new_w) // 2
-        cropped = img.crop((left, 0, left + new_w, h))
+
+def _crop_size_for_aspect(size: tuple[int, int], target_aspect: float):
+    """Largest box of target_aspect (width/height) that fits inside size, plus the
+    fraction of area that a crop to that box would discard."""
+    w, h = size
+    if w / h > target_aspect:
+        new_w, new_h = round(h * target_aspect), h
     else:
-        # too tall: crop height, keep full width
-        new_h = round(w / target_aspect)
-        top = (h - new_h) // 2
-        cropped = img.crop((0, top, w, top + new_h))
-    discarded_fraction = 1 - (cropped.size[0] * cropped.size[1]) / (w * h)
+        new_w, new_h = w, round(w / target_aspect)
+    discarded_fraction = 1 - (new_w * new_h) / (w * h)
+    return new_w, new_h, discarded_fraction
+
+
+def smart_crop_to_aspect(img: Image.Image, target_aspect: float):
+    """Crop to target_aspect (width/height) without rotating, keeping the photo upright.
+    Uses saliency detection (edges/entropy/skin tone) to position the crop window so it
+    keeps the most interesting content instead of always cutting evenly off both sides.
+    Returns (cropped_img, fraction_of_area_discarded)."""
+    new_w, new_h, discarded_fraction = _crop_size_for_aspect(img.size, target_aspect)
+    box = _SMART_CROPPER.crop(img, new_w, new_h)["top_crop"]
+    cropped = img.crop((box["x"], box["y"], box["x"] + box["width"], box["y"] + box["height"]))
     return cropped, discarded_fraction
 
 
@@ -48,9 +55,10 @@ def best_orientation_crop(img: Image.Image, target_aspect: float):
     candidates = []
     for rotated in (False, True):
         candidate = img.rotate(-90, expand=True) if rotated else img
-        cropped, discarded_fraction = center_crop_to_aspect(candidate, target_aspect)
-        candidates.append((discarded_fraction, rotated, cropped))
-    discarded_fraction, rotated, cropped = min(candidates, key=lambda c: c[0])
+        _, _, discarded_fraction = _crop_size_for_aspect(candidate.size, target_aspect)
+        candidates.append((discarded_fraction, rotated, candidate))
+    _, rotated, candidate = min(candidates, key=lambda c: c[0])
+    cropped, discarded_fraction = smart_crop_to_aspect(candidate, target_aspect)
     return cropped, discarded_fraction, rotated
 
 
@@ -76,7 +84,7 @@ def run(input_dir: Path, output_dir: Path):
     errors_dir = output_dir.parent / "errors"
 
     paths = sorted(
-        p for p in input_dir.iterdir() if p.suffix.lower() in {".jpg", ".jpeg", ".png", ".heic"}
+        p for p in input_dir.iterdir() if p.suffix.lower() in {".jpg", ".jpeg", ".png", ".heic", ".webp"}
     )
 
     written = []
