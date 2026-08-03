@@ -17,6 +17,7 @@ from common import (
     DPI,
     SHEET_H_PX,
     SHEET_W_PX,
+    unique_path,
 )
 
 POSITIONS = [(0, 0), (1, 0), (0, 1), (1, 1)]  # (col, row) within the 2x2 grid
@@ -73,11 +74,11 @@ def run(cells_dir: Path, output_dir: Path):
 
         draw_cut_guides(sheet)
 
-        out_path = output_dir / f"sheet_{sheet_num:03d}.jpg"
+        out_path = unique_path(output_dir / f"sheet_{sheet_num:03d}.jpg")
         sheet.save(out_path, quality=95, dpi=(DPI, DPI))
         print(f"  sheet {sheet_num}: {len(batch)} photo(s) -> {out_path.name}")
 
-    manifest_path = output_dir / "manifest.csv"
+    manifest_path = unique_path(output_dir / "manifest.csv")
     with open(manifest_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["sheet", "position", "source_file"])
         writer.writeheader()

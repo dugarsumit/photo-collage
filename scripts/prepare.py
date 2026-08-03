@@ -16,6 +16,7 @@ from common import (
     CONTENT_H_PX,
     CONTENT_W_PX,
     DPI,
+    unique_path,
 )
 
 
@@ -65,7 +66,7 @@ def make_cell(src_path: Path, allow_truncated: bool = False):
 
 def copy_to_errors(p: Path, errors_dir: Path):
     errors_dir.mkdir(parents=True, exist_ok=True)
-    dest = errors_dir / p.name
+    dest = unique_path(errors_dir / p.name)
     shutil.copy2(p, dest)
     return dest
 
@@ -95,7 +96,7 @@ def run(input_dir: Path, output_dir: Path):
                 continue
             recovered.append(p)
             tqdm.write(f"  ⚠ recovered {p.name} after error: {e}")
-        out_path = output_dir / f"{p.stem}_cell.jpg"
+        out_path = unique_path(output_dir / f"{p.stem}_cell.jpg")
         cell.save(out_path, quality=95, dpi=(DPI, DPI))
         written.append(out_path)
         rot_note = ", rotated 90°" if rotated else ""

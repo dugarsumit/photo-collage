@@ -1,8 +1,23 @@
 """Shared print geometry: 6.5x9cm cells (border included), 4 per 13x18cm sheet."""
 
+from pathlib import Path
+
 import pillow_heif
 
 pillow_heif.register_heif_opener()
+
+
+def unique_path(path: Path) -> Path:
+    """Return path unchanged if free, otherwise the same name with a `_2`, `_3`, ... postfix
+    so an existing file is never overwritten."""
+    if not path.exists():
+        return path
+    n = 2
+    while True:
+        candidate = path.with_stem(f"{path.stem}_{n}")
+        if not candidate.exists():
+            return candidate
+        n += 1
 
 DPI = 300
 
