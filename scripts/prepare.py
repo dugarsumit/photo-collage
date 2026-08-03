@@ -40,13 +40,25 @@ def center_crop_to_aspect(img: Image.Image, target_aspect: float):
     return cropped, discarded_fraction
 
 
+def best_orientation_crop(img: Image.Image, target_aspect: float):
+    """Try the photo as-is and rotated 90°, keep whichever needs less crop.
+    Returns (cropped_img, discarded_fraction, rotated)."""
+    candidates = []
+    for rotated in (False, True):
+        candidate = img.rotate(-90, expand=True) if rotated else img
+        cropped, discarded_fraction = center_crop_to_aspect(candidate, target_aspect)
+        candidates.append((discarded_fraction, rotated, cropped))
+    discarded_fraction, rotated, cropped = min(candidates, key=lambda c: c[0])
+    return cropped, discarded_fraction, rotated
+
+
 def make_cell(src_path: Path):
     img = ImageOps.exif_transpose(Image.open(src_path)).convert("RGB")
-    img, discarded_fraction = center_crop_to_aspect(img, CONTENT_ASPECT)
+    img, discarded_fraction, rotated = best_orientation_crop(img, CONTENT_ASPECT)
     img = img.resize((CONTENT_W_PX, CONTENT_H_PX), Image.Resampling.LANCZOS)
     cell = ImageOps.expand(img, border=BORDER_PX, fill=BORDER_COLOR)
     assert cell.size == (CELL_W_PX, CELL_H_PX), cell.size
-    return cell, discarded_fraction
+    return cell, discarded_fraction, rotated
 
 
 def run(input_dir: Path, output_dir: Path):
@@ -58,13 +70,14 @@ def run(input_dir: Path, output_dir: Path):
 
     written = []
     for p in tqdm(paths, desc="Preparing cells", unit="photo"):
-        cell, discarded_fraction = make_cell(p)
+        cell, discarded_fraction, rotated = make_cell(p)
         out_path = output_dir / f"{p.stem}_cell.jpg"
         cell.save(out_path, quality=95, dpi=(DPI, DPI))
         written.append(out_path)
+        rot_note = ", rotated 90°" if rotated else ""
         warn = f"  ⚠ heavy crop, {discarded_fraction:.0%} of area discarded" \
             if discarded_fraction > HEAVY_CROP_WARN_THRESHOLD else ""
-        tqdm.write(f"  {p.name} -> {out_path.name} ({CELL_W_PX}x{CELL_H_PX}px @ {DPI}dpi){warn}")
+        tqdm.write(f"  {p.name} -> {out_path.name} ({CELL_W_PX}x{CELL_H_PX}px @ {DPI}dpi{rot_note}){warn}")
 
     print(f"Prepared {len(written)} cell(s) in {output_dir}")
     return written
