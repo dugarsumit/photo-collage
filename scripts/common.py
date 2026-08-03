@@ -8,7 +8,7 @@ def cm_to_px(cm: float) -> int:
 
 
 CELL_W_CM, CELL_H_CM = 6.5, 9.0
-BORDER_CM = 0.2  # 2mm — cutting tolerance, not a decorative frame
+BORDER_CM = 0.3  # 3mm — cutting tolerance, not a decorative frame
 
 CELL_W_PX = cm_to_px(CELL_W_CM)
 CELL_H_PX = cm_to_px(CELL_H_CM)
@@ -27,7 +27,7 @@ BORDER_COLOR = (255, 255, 255)
 
 # Cut guide lines, drawn down the seam between adjacent cells (light so they're a guide,
 # not part of the visible design once cut).
-CUT_LINE_COLOR = (210, 210, 210)
+CUT_LINE_COLOR = (180, 180, 180)
 CUT_LINE_DASH_PX = 8
 CUT_LINE_GAP_PX = 6
 CUT_LINE_WIDTH_PX = 1

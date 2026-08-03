@@ -1,10 +1,10 @@
-"""Crop/resize kept photos to the 6.5x9cm cell size and bake in a 4mm border."""
+"""Crop/resize kept photos to the 6.5x9cm cell size and bake in a 3mm border."""
 
-import csv
 import sys
 from pathlib import Path
 
 from PIL import Image, ImageOps
+from tqdm import tqdm
 
 from common import (
     BORDER_COLOR,
@@ -49,33 +49,22 @@ def make_cell(src_path: Path):
     return cell, discarded_fraction
 
 
-def run(input_dir: Path, dedup_csv: Path, output_dir: Path):
+def run(input_dir: Path, output_dir: Path):
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    kept_names = None
-    if dedup_csv.exists():
-        with open(dedup_csv) as f:
-            reader = csv.DictReader(f)
-            kept_names = {row["filename"] for row in reader if row["kept"] == "True"}
-        print(f"Using dedup result: {len(kept_names)} photo(s) kept")
-    else:
-        print(f"No dedup CSV at {dedup_csv}, processing all photos in {input_dir}")
 
     paths = sorted(
         p for p in input_dir.iterdir() if p.suffix.lower() in {".jpg", ".jpeg", ".png", ".heic"}
     )
-    if kept_names is not None:
-        paths = [p for p in paths if p.name in kept_names]
 
     written = []
-    for p in paths:
+    for p in tqdm(paths, desc="Preparing cells", unit="photo"):
         cell, discarded_fraction = make_cell(p)
         out_path = output_dir / f"{p.stem}_cell.jpg"
         cell.save(out_path, quality=95, dpi=(DPI, DPI))
         written.append(out_path)
         warn = f"  ⚠ heavy crop, {discarded_fraction:.0%} of area discarded" \
             if discarded_fraction > HEAVY_CROP_WARN_THRESHOLD else ""
-        print(f"  {p.name} -> {out_path.name} ({CELL_W_PX}x{CELL_H_PX}px @ {DPI}dpi){warn}")
+        tqdm.write(f"  {p.name} -> {out_path.name} ({CELL_W_PX}x{CELL_H_PX}px @ {DPI}dpi){warn}")
 
     print(f"Prepared {len(written)} cell(s) in {output_dir}")
     return written
@@ -83,6 +72,5 @@ def run(input_dir: Path, dedup_csv: Path, output_dir: Path):
 
 if __name__ == "__main__":
     input_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("pics")
-    dedup_csv = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("output/dedup.csv")
-    output_dir = Path(sys.argv[3]) if len(sys.argv) > 3 else Path("output/cells")
-    run(input_dir, dedup_csv, output_dir)
+    output_dir = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("output/cells")
+    run(input_dir, output_dir)
