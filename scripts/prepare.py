@@ -1,9 +1,10 @@
 """Crop/resize kept photos to the 6.5x9cm cell size and bake in a 3mm border."""
 
+import shutil
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageFile, ImageOps
 from tqdm import tqdm
 
 from common import (
@@ -52,7 +53,8 @@ def best_orientation_crop(img: Image.Image, target_aspect: float):
     return cropped, discarded_fraction, rotated
 
 
-def make_cell(src_path: Path):
+def make_cell(src_path: Path, allow_truncated: bool = False):
+    ImageFile.LOAD_TRUNCATED_IMAGES = allow_truncated  # type: ignore[assignment]
     img = ImageOps.exif_transpose(Image.open(src_path)).convert("RGB")
     img, discarded_fraction, rotated = best_orientation_crop(img, CONTENT_ASPECT)
     img = img.resize((CONTENT_W_PX, CONTENT_H_PX), Image.Resampling.LANCZOS)
@@ -61,22 +63,38 @@ def make_cell(src_path: Path):
     return cell, discarded_fraction, rotated
 
 
+def copy_to_errors(p: Path, errors_dir: Path):
+    errors_dir.mkdir(parents=True, exist_ok=True)
+    dest = errors_dir / p.name
+    shutil.copy2(p, dest)
+    return dest
+
+
 def run(input_dir: Path, output_dir: Path):
     output_dir.mkdir(parents=True, exist_ok=True)
+    errors_dir = output_dir.parent / "errors"
 
     paths = sorted(
         p for p in input_dir.iterdir() if p.suffix.lower() in {".jpg", ".jpeg", ".png", ".heic"}
     )
 
     written = []
+    recovered = []
     failed = []
     for p in tqdm(paths, desc="Preparing cells", unit="photo"):
         try:
             cell, discarded_fraction, rotated = make_cell(p)
         except OSError as e:
-            failed.append(p)
-            tqdm.write(f"  ⚠ skipping {p.name}: {e}")
-            continue
+            tqdm.write(f"  ⚠ error reading {p.name}: {e} — retrying with truncated-image recovery")
+            copy_to_errors(p, errors_dir)
+            try:
+                cell, discarded_fraction, rotated = make_cell(p, allow_truncated=True)
+            except OSError as e2:
+                failed.append(p)
+                tqdm.write(f"  ✗ skipping {p.name}: unrecoverable: {e2}")
+                continue
+            recovered.append(p)
+            tqdm.write(f"  ⚠ recovered {p.name} after error: {e}")
         out_path = output_dir / f"{p.stem}_cell.jpg"
         cell.save(out_path, quality=95, dpi=(DPI, DPI))
         written.append(out_path)
@@ -86,8 +104,12 @@ def run(input_dir: Path, output_dir: Path):
         tqdm.write(f"  {p.name} -> {out_path.name} ({CELL_W_PX}x{CELL_H_PX}px @ {DPI}dpi{rot_note}){warn}")
 
     print(f"Prepared {len(written)} cell(s) in {output_dir}")
+    if recovered:
+        print(f"Recovered {len(recovered)} file(s) with errors (copied to {errors_dir}):")
+        for p in recovered:
+            print(f"  {p.name}")
     if failed:
-        print(f"Skipped {len(failed)} unreadable file(s):")
+        print(f"Skipped {len(failed)} unreadable file(s) (copied to {errors_dir}):")
         for p in failed:
             print(f"  {p.name}")
     return written
