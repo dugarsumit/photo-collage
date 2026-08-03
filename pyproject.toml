@@ -5,6 +5,7 @@ description = "Add your description here"
 requires-python = ">=3.12"
 dependencies = [
     "pillow>=12.3.0",
+    "pillow-heif>=0.18.0",
     "qrcode>=8.2",
     "tqdm>=4.70.0",
 ]

@@ -1,5 +1,9 @@
 """Shared print geometry: 6.5x9cm cells (border included), 4 per 13x18cm sheet."""
 
+import pillow_heif
+
+pillow_heif.register_heif_opener()
+
 DPI = 300
 
 
