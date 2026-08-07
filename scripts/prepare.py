@@ -1,4 +1,5 @@
-"""Crop/resize kept photos to the 6.5x9cm cell size and bake in a 3mm border."""
+"""Crop/resize kept photos to fit the sheet's content cell size (no border baked in —
+layout.py adds the equal-width margin/gutter around each photo)."""
 
 import argparse
 import shutil
@@ -9,10 +10,6 @@ from PIL import Image, ImageFile, ImageOps
 from tqdm import tqdm
 
 from common import (
-    BORDER_COLOR,
-    BORDER_PX,
-    CELL_H_PX,
-    CELL_W_PX,
     CONTENT_ASPECT,
     CONTENT_H_PX,
     CONTENT_W_PX,
@@ -82,9 +79,8 @@ def make_cell(src_path: Path, allow_truncated: bool = False, crop_mode: str = DE
     ImageFile.LOAD_TRUNCATED_IMAGES = allow_truncated  # type: ignore[assignment]
     img = ImageOps.exif_transpose(Image.open(src_path)).convert("RGB")
     img, discarded_fraction, rotated = best_orientation_crop(img, CONTENT_ASPECT, crop_mode)
-    img = img.resize((CONTENT_W_PX, CONTENT_H_PX), Image.Resampling.LANCZOS)
-    cell = ImageOps.expand(img, border=BORDER_PX, fill=BORDER_COLOR)
-    assert cell.size == (CELL_W_PX, CELL_H_PX), cell.size
+    cell = img.resize((CONTENT_W_PX, CONTENT_H_PX), Image.Resampling.LANCZOS)
+    assert cell.size == (CONTENT_W_PX, CONTENT_H_PX), cell.size
     return cell, discarded_fraction, rotated
 
 
@@ -126,7 +122,7 @@ def run(input_dir: Path, output_dir: Path, crop_mode: str = DEFAULT_CROP_MODE):
         rot_note = ", rotated 90°" if rotated else ""
         warn = f"  ⚠ heavy crop, {discarded_fraction:.0%} of area discarded" \
             if discarded_fraction > HEAVY_CROP_WARN_THRESHOLD else ""
-        tqdm.write(f"  {p.name} -> {out_path.name} ({CELL_W_PX}x{CELL_H_PX}px @ {DPI}dpi{rot_note}){warn}")
+        tqdm.write(f"  {p.name} -> {out_path.name} ({CONTENT_W_PX}x{CONTENT_H_PX}px @ {DPI}dpi{rot_note}){warn}")
 
     print(f"Prepared {len(written)} cell(s) in {output_dir}")
     if recovered:

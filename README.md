@@ -1,8 +1,9 @@
 # photo-collage
 
-Turns a folder of photos into print-ready sheets: each photo becomes a
-6.5x9cm cell (3mm border baked in for cutting tolerance), and 4 cells are
-tiled onto a 13x18cm sheet with dotted cut guides.
+Turns a folder of photos into print-ready sheets: each photo is cropped/resized
+to a content cell, and 4 cells are tiled 2x2 onto a 12.7x17.6cm sheet with a
+3mm margin/gutter (same width on all four sides of every photo) and dotted
+cut guides down the middle of each gutter.
 
 ## Setup
 

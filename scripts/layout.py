@@ -1,4 +1,4 @@
-"""Tile prepared cells 2x2 onto 13x18cm print sheets."""
+"""Tile prepared cells 2x2 onto 12.7x17.6cm print sheets."""
 
 import csv
 import sys
@@ -7,14 +7,19 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 from common import (
-    CELL_H_PX,
-    CELL_W_PX,
+    BORDER_PX,
     CELLS_PER_SHEET,
+    CONTENT_H_PX,
+    CONTENT_W_PX,
     CUT_LINE_COLOR,
     CUT_LINE_DASH_PX,
     CUT_LINE_GAP_PX,
     CUT_LINE_WIDTH_PX,
+    CUT_LINE_X_PX,
+    CUT_LINE_Y_PX,
     DPI,
+    GUTTER_PX,
+    SHEET_BG_COLOR,
     SHEET_H_PX,
     SHEET_W_PX,
     unique_path,
@@ -45,8 +50,8 @@ def draw_dotted_line(draw: ImageDraw.ImageDraw, start, end):
 
 def draw_cut_guides(sheet: Image.Image):
     draw = ImageDraw.Draw(sheet)
-    draw_dotted_line(draw, (CELL_W_PX, 0), (CELL_W_PX, SHEET_H_PX))
-    draw_dotted_line(draw, (0, CELL_H_PX), (SHEET_W_PX, CELL_H_PX))
+    draw_dotted_line(draw, (CUT_LINE_X_PX, 0), (CUT_LINE_X_PX, SHEET_H_PX))
+    draw_dotted_line(draw, (0, CUT_LINE_Y_PX), (SHEET_W_PX, CUT_LINE_Y_PX))
 
 
 def run(cells_dir: Path, output_dir: Path):
@@ -60,12 +65,14 @@ def run(cells_dir: Path, output_dir: Path):
     for sheet_idx in range(0, len(cell_paths), CELLS_PER_SHEET):
         batch = cell_paths[sheet_idx : sheet_idx + CELLS_PER_SHEET]
         sheet_num = sheet_idx // CELLS_PER_SHEET + 1
-        sheet = Image.new("RGB", (SHEET_W_PX, SHEET_H_PX), (255, 255, 255))
+        sheet = Image.new("RGB", (SHEET_W_PX, SHEET_H_PX), SHEET_BG_COLOR)
 
         for pos, cell_path in zip(POSITIONS, batch):
             col, row = pos
+            x = BORDER_PX + col * (CONTENT_W_PX + GUTTER_PX)
+            y = BORDER_PX + row * (CONTENT_H_PX + GUTTER_PX)
             with Image.open(cell_path) as cell:
-                sheet.paste(cell, (col * CELL_W_PX, row * CELL_H_PX))
+                sheet.paste(cell, (x, y))
             manifest_rows.append({
                 "sheet": sheet_num,
                 "position": f"col{col}_row{row}",
@@ -86,7 +93,7 @@ def run(cells_dir: Path, output_dir: Path):
 
     n_sheets = (len(cell_paths) + CELLS_PER_SHEET - 1) // CELLS_PER_SHEET
     print(f"Wrote {n_sheets} sheet(s) ({SHEET_W_PX}x{SHEET_H_PX}px @ {DPI}dpi, "
-          f"~13x18cm) and {manifest_path}")
+          f"~12.7x17.6cm) and {manifest_path}")
 
 
 if __name__ == "__main__":
