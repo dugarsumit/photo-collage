@@ -18,10 +18,15 @@ from common import (
     CUT_LINE_X_PX,
     CUT_LINE_Y_PX,
     DPI,
+    EDGE_BUFFER_PX,
     GUTTER_PX,
     SHEET_BG_COLOR,
     SHEET_H_PX,
     SHEET_W_PX,
+    TRIM_BOTTOM_PX,
+    TRIM_LEFT_PX,
+    TRIM_RIGHT_PX,
+    TRIM_TOP_PX,
     unique_path,
 )
 
@@ -31,10 +36,12 @@ POSITIONS = [(0, 0), (1, 0), (0, 1), (1, 1)]  # (col, row) within the 2x2 grid
 def draw_dotted_line(draw: ImageDraw.ImageDraw, start, end):
     (x0, y0), (x1, y1) = start, end
     length = max(abs(x1 - x0), abs(y1 - y0))
+    if length == 0:
+        return
     step = CUT_LINE_DASH_PX + CUT_LINE_GAP_PX
     n_steps = int(length // step) + 1
-    dx = (x1 - x0) / length if length else 0
-    dy = (y1 - y0) / length if length else 0
+    dx = (x1 - x0) / length
+    dy = (y1 - y0) / length
     for i in range(n_steps):
         seg_start = i * step
         seg_end = min(seg_start + CUT_LINE_DASH_PX, length)
@@ -49,9 +56,16 @@ def draw_dotted_line(draw: ImageDraw.ImageDraw, start, end):
 
 
 def draw_cut_guides(sheet: Image.Image):
+    """Dotted outer trim rectangle plus cross guides down the middle of each gutter."""
     draw = ImageDraw.Draw(sheet)
-    draw_dotted_line(draw, (CUT_LINE_X_PX, 0), (CUT_LINE_X_PX, SHEET_H_PX))
-    draw_dotted_line(draw, (0, CUT_LINE_Y_PX), (SHEET_W_PX, CUT_LINE_Y_PX))
+    # Outside border (trim edge of the 2x2 photo block)
+    draw_dotted_line(draw, (TRIM_LEFT_PX, TRIM_TOP_PX), (TRIM_RIGHT_PX, TRIM_TOP_PX))
+    draw_dotted_line(draw, (TRIM_LEFT_PX, TRIM_BOTTOM_PX), (TRIM_RIGHT_PX, TRIM_BOTTOM_PX))
+    draw_dotted_line(draw, (TRIM_LEFT_PX, TRIM_TOP_PX), (TRIM_LEFT_PX, TRIM_BOTTOM_PX))
+    draw_dotted_line(draw, (TRIM_RIGHT_PX, TRIM_TOP_PX), (TRIM_RIGHT_PX, TRIM_BOTTOM_PX))
+    # Internal cuts between the four photos
+    draw_dotted_line(draw, (CUT_LINE_X_PX, TRIM_TOP_PX), (CUT_LINE_X_PX, TRIM_BOTTOM_PX))
+    draw_dotted_line(draw, (TRIM_LEFT_PX, CUT_LINE_Y_PX), (TRIM_RIGHT_PX, CUT_LINE_Y_PX))
 
 
 def run(cells_dir: Path, output_dir: Path):
@@ -69,8 +83,8 @@ def run(cells_dir: Path, output_dir: Path):
 
         for pos, cell_path in zip(POSITIONS, batch):
             col, row = pos
-            x = BORDER_PX + col * (CONTENT_W_PX + GUTTER_PX)
-            y = BORDER_PX + row * (CONTENT_H_PX + GUTTER_PX)
+            x = EDGE_BUFFER_PX + BORDER_PX + col * (CONTENT_W_PX + GUTTER_PX)
+            y = EDGE_BUFFER_PX + BORDER_PX + row * (CONTENT_H_PX + GUTTER_PX)
             with Image.open(cell_path) as cell:
                 sheet.paste(cell, (x, y))
             manifest_rows.append({

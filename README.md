@@ -2,8 +2,9 @@
 
 Turns a folder of photos into print-ready sheets: each photo is cropped/resized
 to a content cell, and 4 cells are tiled 2x2 onto a 12.7x17.6cm sheet with a
-3mm margin/gutter (same width on all four sides of every photo) and dotted
-cut guides down the middle of each gutter.
+2mm margin/gutter (same width on all four sides of every photo), a further 2mm
+edge buffer around the whole block, and dotted cut guides on the outer trim
+plus down the middle of each gutter.
 
 ## Setup
 
